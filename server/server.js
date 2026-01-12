@@ -1,62 +1,68 @@
 const express = require("express");
-const bodyParser = require("body-parser");
 const cors = require("cors");
 const webpush = require("./config/vapid");
-const reminders = require("./models/Reminder");
-require("./jobs/reminderCron");
 
+const reminders = require("./models/Reminder");
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json());
 
-// TEMP storage (later DB)
-let subscriptions = [];
+// TEMP subscription store (single user for now)
+let subscription = null;
 
-// Receive subscription from frontend
-app.post("/subscribe", (req, res) => {
-  const subscription = req.body;
-  subscriptions.push(subscription);
-  console.log("📌 Subscription received");
-
-  res.status(201).json({ message: "Subscription saved" });
+// Health check
+app.get("/health", (req, res) => {
+  res.send("Backend running ✅");
 });
 
-// Send test push
-app.post("/send-test", async (req, res) => {
-  const payload = JSON.stringify({
-    title: "Test Reminder 🔔",
-    body: "Backend push working successfully!"
-  });
+// Save push subscription
+app.post("/subscribe", (req, res) => {
+  subscription = req.body;
+  console.log("📌 Subscription saved");
+  res.json({ message: "Subscribed successfully" });
+});
 
-  try {
-    for (let sub of subscriptions) {
-      await webpush.sendNotification(sub, payload);
-    }
-    res.json({ message: "Push sent" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Push failed" });
+// Set reminder
+app.post("/reminder", (req, res) => {
+  const { title, time } = req.body;
+
+  if (!subscription) {
+    return res.status(400).json({ error: "No subscription found" });
   }
+
+  const reminderTime = new Date(time).getTime();
+  const delay = reminderTime - Date.now();
+
+  if (delay <= 0) {
+    return res.status(400).json({ error: "Time must be in the future" });
+  }
+
+  const reminder = { title, time, sent: false };
+  reminders.push(reminder);
+
+  setTimeout(async () => {
+    const payload = JSON.stringify({
+      title: "⏰ Reminder",
+      body: title
+    });
+
+    try {
+      await webpush.sendNotification(subscription, payload);
+      reminder.sent = true;
+      console.log("🔔 Reminder sent:", title);
+    } catch (err) {
+      console.error("❌ Push failed:", err);
+    }
+  }, delay);
+
+  console.log("⏰ Reminder scheduled:", title, time);
+  res.json({ message: "Reminder set successfully" });
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
-app.post("/reminder", (req, res) => {
-  const { title, time, subscription } = req.body;
-
-  reminders.push({
-    title,
-    time,
-    subscription,
-    sent: false
-  });
-
-  console.log("⏰ Reminder saved:", title, time);
-  res.json({ message: "Reminder scheduled" });
-});
-
