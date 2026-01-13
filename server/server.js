@@ -1,39 +1,43 @@
 const express = require("express");
+const bodyParser = require("body-parser");
 const cors = require("cors");
 const webpush = require("./config/vapid");
-
 const reminders = require("./models/Reminder");
 
+require("./jobs/reminderCron");
+
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
-// Middleware
 app.use(cors());
-app.use(express.json());
+app.use(bodyParser.json());
 
-// TEMP subscription store (single user for now)
-let subscription = null;
+// TEMP subscription store
+let subscriptions = [];
 
-// Health check
-app.get("/health", (req, res) => {
-  res.send("Backend running ✅");
-});
-
-// Save push subscription
+// Receive subscription
 app.post("/subscribe", (req, res) => {
-  subscription = req.body;
+  subscriptions.push(req.body);
   console.log("📌 Subscription saved");
-  res.json({ message: "Subscribed successfully" });
+  res.json({ success: true });
 });
 
-app.post("/reminder", async (req, res) => {
-  console.log("🔥 Sending push NOW");
+// Schedule reminder
+app.post("/reminder", (req, res) => {
+  const { title, time, subscription } = req.body;
 
-  await webpush.sendNotification(subscription, JSON.stringify({
-    title: "TEST",
-    body: "Immediate push test"
-  }));
+  if (!title || !time || !subscription) {
+    return res.status(400).json({ error: "Invalid reminder data" });
+  }
 
+  reminders.push({
+    title,
+    time,
+    subscription,
+    sent: false
+  });
+
+  console.log("⏰ Reminder scheduled:", title, time);
   res.json({ success: true });
 });
 
