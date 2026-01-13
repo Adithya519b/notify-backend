@@ -14,6 +14,10 @@ app.use(bodyParser.json());
 
 // TEMP subscription store
 let subscriptions = [];
+app.get("/", (req, res) => {
+  res.send("Backend is running 🚀");
+});
+
 
 // Receive subscription
 app.post("/subscribe", (req, res) => {
