@@ -30,7 +30,7 @@ app.post("/subscribe", (req, res) => {
 app.post("/reminder", (req, res) => {
   const { title, time, subscription } = req.body;
 
-  if (!title || !time || !subscription) {
+  if (!title || !time ) {
     return res.status(400).json({ error: "Invalid reminder data" });
   }
 
